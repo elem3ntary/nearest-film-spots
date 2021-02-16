@@ -2,6 +2,12 @@
 
 Nearest filming spots is a library which helps to find nearest to the specified location filming spots by year
 
+## Prerequirements
+
+```bash
+pip install requirements.txt
+```
+
 ## Usage example
 
 ```
