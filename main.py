@@ -1,8 +1,7 @@
-from os import replace
 import folium
 import time
 import pandas as pd
-from haversine import haversine as get_distance
+from haversine import haversine
 import re
 import folium.plugins as plg
 import random
@@ -10,17 +9,18 @@ import random
 
 def get_closest_locations(location: tuple,  dataset_path='worldcities.csv'):
     '''
-    Gets distance for all cities in dataset and them sorted by it
+    Returns cities sorted by distance between them and the location
     '''
     df = pd.read_csv(dataset_path)
-    df['distance'] = df.apply(lambda row: get_distance(location, (row['lat'], row['lng'])), axis=1)
+    df['distance'] = df.apply(lambda row: haversine(location, (row['lat'], row['lng'])), axis=1)
     sorted_df = df.sort_values(['distance'], ascending=True)
     sorted_df.reset_index(drop=True, inplace=True)
     return sorted_df
 
 
-def parse_line(line):
+def parse_line(line: str) -> tuple:
     '''
+    Returns parsed line in
     '''
     try:
         address = re.search(r'\t(.*)', line).group()
@@ -43,12 +43,12 @@ def parse_line(line):
 
 def get_movies_dict(year: str, locations_list_path='locations.list') -> dict:
     '''
-    Parses locations.list and creates dict in next format:
-    city: {films}
+    Parses locations.list and creates dict in following format:
+    {city: {films}}
     '''
     movies = dict()
     with open(locations_list_path, 'r') as file:
-        for _, line in enumerate(file):
+        for line in file:
             movie_data = parse_line(line)
             if not movie_data:
                 continue
@@ -58,7 +58,10 @@ def get_movies_dict(year: str, locations_list_path='locations.list') -> dict:
     return movies
 
 
-def get_closest_movies(locations_df, movies):
+def get_closest_movies(locations_df, movies) -> list:
+    '''
+    Returns movies that are filmed in nearest locations
+    '''
     matches = []
     for _, row in locations_df.iterrows():
         if len(matches) >= 40:
@@ -71,11 +74,14 @@ def get_closest_movies(locations_df, movies):
     return matches
 
 
-def random_deviation():
+def random_deviation() -> float:
     return random.randint(0, 1000) / 100000
 
 
 def create_map(location, closest_movies):
+    '''
+    Creates and saves map
+    '''
     map = folium.Map(location=list(location), zoom_start=10)
 
     folium.Marker(location=list(location), icon=folium.Icon(color="orange", icon="home")).add_to(map)
@@ -88,26 +94,31 @@ def create_map(location, closest_movies):
         lat += random_deviation()
         lng += random_deviation()
 
-        clusters[movie[0]] = city_cluster = clusters.get(movie[0], plg.MarkerCluster())
+        clusters[movie[0]] = city_cluster = clusters.get(
+            movie[0], ((lat, lng), plg.MarkerCluster()))
 
         folium.Marker(
             location=[lat, lng],
             radius=10, popup=movie[1],
-        ).add_to(city_cluster)
+        ).add_to(city_cluster[1])
 
-    for cluster in clusters.values():
-        cluster.add_to(map)
+    points = folium.FeatureGroup(name='points')
+    polylines = folium.FeatureGroup(name='polylines')
+    for point_location, cluster in clusters.values():
+        folium.PolyLine([location, point_location], color="red", weight=1.5, opacity=1).add_to(polylines)
+        cluster.add_to(points)
 
+    points.add_to(map)
+    polylines.add_to(map)
+    map.add_child(folium.LayerControl())
     map.save('Result.html')
 
 
 if __name__ == '__main__':
-    # year = '2003'
-    # location = (42.3584300, -71.0597700)
 
-    year = input('Enter creation year: ')
+    year = input('Please enter a year you would like to have a map for: ')
 
-    location = input('Enter location (example: 42.3584300, -71.0597700): ')
+    location = input('Please enter your location (format: lat, long): ')
     location = tuple(map(float, location.split(',')))
 
     print('Generating map...')
@@ -118,5 +129,5 @@ if __name__ == '__main__':
     closest_movies = get_closest_movies(locations_df, movies)
 
     create_map(location, closest_movies)
-
+    print('Finished!')
     print(f'--- {time.time() - start_time} seconds ---')
